@@ -48,7 +48,7 @@ export default function Home() {
   </div>
 
   <a
-  href="https://github.com/"
+  href="https://github.com/PallaviPuligilla/listentogether-music-room"
   target="_blank"
   rel="noreferrer"
   className="px-4 py-2 rounded-lg text-sm font-semibold border"

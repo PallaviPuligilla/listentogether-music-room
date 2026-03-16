@@ -1,6 +1,30 @@
 # 🎵 ListenTogether
 
+
+![React](https://img.shields.io/badge/Frontend-React-blue)
+![Node.js](https://img.shields.io/badge/Backend-Node.js-green)
+![Socket.IO](https://img.shields.io/badge/Realtime-Socket.IO-black)
+![TailwindCSS](https://img.shields.io/badge/Styling-TailwindCSS-38B2AC)
+![Status](https://img.shields.io/badge/Project-Active-success)
 ListenTogether is a real-time music room web application where users can create rooms and listen to music together with synchronized playback.
+## Home Page
+
+![Home Page](homepage.png)
+
+---
+
+## Join Room
+
+![Join Room](join.png)
+
+---
+
+## Music Room Interface
+
+![Music Room](music.png)
+
+---
+
 
 ## Features
 
