@@ -69,6 +69,7 @@ listentogether
 
 Open in browser:
 http://localhost:5173
+live:https://listentogether-xi.vercel.app
 
 ## Future Improvements
 
