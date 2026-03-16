@@ -1,4 +1,4 @@
-// components/Player/Player.jsx — Music player with controls, seek, volume, upload
+// components/Player/Player.jsx — Music player (ALL USERS CAN CONTROL)
 
 import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -21,7 +21,7 @@ export default function Player({
   playlist,
   currentSongIndex,
   isPlaying,
-  isHost,
+  // isHost,           // ✅ No longer needed
   userName,
   onPlay,
   onPause,
@@ -57,8 +57,8 @@ export default function Player({
     const onLoaded = () => setDuration(audio.duration);
     const onEnded = () => {
       setIsPlaying(false);
-      // Auto-advance to next song
-      if (isHost && playlist.length > 1) {
+      // ✅ Anyone can auto-advance (not just host)
+      if (playlist.length > 1) {
         const next = (currentSongIndex + 1) % playlist.length;
         onChangeSong(next);
       }
@@ -73,10 +73,10 @@ export default function Player({
       audio.removeEventListener('loadedmetadata', onLoaded);
       audio.removeEventListener('ended', onEnded);
     };
-  }, [audioRef, isHost, currentSongIndex, playlist.length, onChangeSong]);
+  }, [audioRef, currentSongIndex, playlist.length, onChangeSong]);
 
+  // ✅ REMOVED: No more host check
   function handlePlayPause() {
-    if (!isHost) { toast.error('🔒 Only the host can control playback'); return; }
     if (!song) { toast('Upload a song first! 🎵'); return; }
     const audio = audioRef.current;
     if (isPlaying) {
@@ -90,8 +90,8 @@ export default function Player({
     }
   }
 
+  // ✅ REMOVED: No more host check
   function handleSeekChange(e) {
-    if (!isHost) return;
     const audio = audioRef.current;
     if (!audio || isNaN(audio.duration)) return;
     const t = (e.target.value / 100) * audio.duration;
@@ -100,14 +100,14 @@ export default function Player({
     onSeek(t);
   }
 
+  // ✅ REMOVED: No more host check
   function handlePrev() {
-    if (!isHost) { toast.error('🔒 Only the host can skip songs'); return; }
     if (playlist.length === 0) return;
     onChangeSong((currentSongIndex - 1 + playlist.length) % playlist.length);
   }
 
+  // ✅ REMOVED: No more host check
   function handleNext() {
-    if (!isHost) { toast.error('🔒 Only the host can skip songs'); return; }
     if (playlist.length === 0) return;
     onChangeSong((currentSongIndex + 1) % playlist.length);
   }
@@ -123,7 +123,6 @@ export default function Player({
     for (const file of files) {
       const url = URL.createObjectURL(file);
       const name = file.name.replace(/\.[^.]+$/, '');
-      // Get duration via a temp audio element
       const dur = await new Promise(resolve => {
         const tmp = new Audio(url);
         tmp.addEventListener('loadedmetadata', () => resolve(tmp.duration));
@@ -137,22 +136,22 @@ export default function Player({
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="bg-white rounded-2xl p-5 border"
+    <div className="bg-white rounded-2xl p-4 sm:p-5 border"
       style={{ borderColor: 'rgba(108,92,231,0.13)', boxShadow: '0 2px 16px rgba(108,92,231,0.08)' }}>
 
       {/* Song info */}
-      <div className="flex items-center gap-4 mb-5">
-        <div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0"
+      <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
+        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ background: song ? GRADIENTS[currentSongIndex % GRADIENTS.length] : '#ede9fe' }}>
-          <svg viewBox="0 0 24 24" fill="white" className="w-7 h-7">
+          <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6 sm:w-7 sm:h-7">
             <path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/>
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-bold text-base truncate" style={{ color: '#1e1b4b' }}>
+          <div className="font-bold text-sm sm:text-base truncate" style={{ color: '#1e1b4b' }}>
             {song ? song.name : 'No song selected'}
           </div>
-          <div className="text-sm truncate" style={{ color: '#9ca3af' }}>
+          <div className="text-xs sm:text-sm truncate" style={{ color: '#9ca3af' }}>
             {song ? (song.type || 'Audio') : 'Upload a song to begin'}
           </div>
           {song && (
@@ -163,15 +162,14 @@ export default function Player({
         </div>
       </div>
 
-      {/* Seek bar */}
-      <div className="mb-4">
+      {/* Seek bar — ✅ Everyone can seek now */}
+      <div className="mb-3 sm:mb-4">
         <input
           type="range" min="0" max="100" step="0.1"
           value={progress}
           onChange={handleSeekChange}
-          disabled={!isHost}
           className="w-full h-1 rounded-full mb-1.5"
-          style={{ accentColor: '#6c5ce7', cursor: isHost ? 'pointer' : 'not-allowed', display: 'block' }}
+          style={{ accentColor: '#6c5ce7', cursor: 'pointer', display: 'block' }}
         />
         <div className="flex justify-between text-xs" style={{ color: '#9ca3af' }}>
           <span>{formatTime(currentTime)}</span>
@@ -179,11 +177,11 @@ export default function Player({
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center justify-center gap-4 mb-4">
+      {/* Controls — ✅ Everyone can control */}
+      <div className="flex items-center justify-center gap-3 sm:gap-4 mb-3 sm:mb-4">
         {/* Prev */}
         <button onClick={handlePrev}
-          className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center"
           style={{ background: '#f5f3ff', border: 'none', cursor: 'pointer' }}
           title="Previous">
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#6c5ce7">
@@ -193,21 +191,21 @@ export default function Player({
 
         {/* Play/Pause */}
         <button onClick={handlePlayPause}
-          className="w-14 h-14 rounded-full flex items-center justify-center transition-all hover:scale-105"
+          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center"
           style={{
             background: '#6c5ce7',
             border: 'none', cursor: 'pointer',
             boxShadow: '0 4px 18px rgba(108,92,231,0.4)',
           }}>
           {isPlaying
-            ? <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            : <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6"><path d="M8 5v14l11-7z"/></svg>
+            ? <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5 sm:w-6 sm:h-6"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+            : <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5 sm:w-6 sm:h-6"><path d="M8 5v14l11-7z"/></svg>
           }
         </button>
 
         {/* Next */}
         <button onClick={handleNext}
-          className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
+          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center"
           style={{ background: '#f5f3ff', border: 'none', cursor: 'pointer' }}
           title="Next">
           <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#6c5ce7">
@@ -217,7 +215,7 @@ export default function Player({
       </div>
 
       {/* Volume */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-3 sm:mb-4">
         <span className="text-base">🔈</span>
         <input type="range" min="0" max="100" value={volume}
           onChange={handleVolumeChange}
@@ -227,15 +225,9 @@ export default function Player({
         <span className="text-base">🔊</span>
       </div>
 
-      {/* Host lock notice */}
-      {!isHost && (
-        <div className="text-center text-xs py-2 px-3 rounded-lg mb-3 font-medium"
-          style={{ background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' }}>
-          🔒 Only the host can control playback
-        </div>
-      )}
+      {/* ✅ REMOVED: Host lock notice — no longer needed */}
 
-      {/* Upload */}
+      {/* Upload — ✅ Everyone can upload */}
       <div
         onClick={() => fileInputRef.current?.click()}
         className="border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"

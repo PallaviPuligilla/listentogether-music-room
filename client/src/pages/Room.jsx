@@ -300,7 +300,7 @@ export default function Room() {
             playlist={playlist}
             currentSongIndex={currentSongIndex}
             isPlaying={isPlaying}
-            isHost={isHost}
+            //isHost={isHost}
             userName={user.name}
             onPlay={handlePlay}
             onPause={handlePause}
@@ -322,7 +322,7 @@ export default function Room() {
             playlist={playlist}
             currentSongIndex={currentSongIndex}
             isPlaying={isPlaying}
-            isHost={isHost}
+            isHost={true}
             onSelect={handleChangeSong}
             onRemove={handleRemoveSong}
           />
