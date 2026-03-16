@@ -45,13 +45,6 @@ app.get('/', (req, res) => {
 
 // ─── START SERVER ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001;
-
 server.listen(PORT, () => {
-  console.log(`
-  ┌──────────────────────────────────────────┐
-  │        ListenTogether Server             │
-  │  Running on port ${PORT}                    │
-  │  Frontend: ${FRONTEND_URL}    │
-  └──────────────────────────────────────────┘
-  `);
+  console.log(`Server running on port ${PORT}`);
 });
