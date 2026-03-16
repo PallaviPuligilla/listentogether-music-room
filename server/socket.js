@@ -1,245 +1,176 @@
-// components/Player/Player.jsx — Music player (ALL USERS CAN CONTROL)
+// server/socket.js — All Socket.IO event handlers (NO HOST RESTRICTIONS)
 
-import React, { useEffect, useRef, useState } from 'react';
-import toast from 'react-hot-toast';
+const {
+  createRoom,
+  getRoom,
+  addParticipant,
+  removeParticipant,
+  addSong,
+  removeSong,
+  updatePlayback,
+  getLiveCurrentTime,
+} = require('./roomManager');
 
-function formatTime(s) {
-  if (!s || isNaN(s)) return '0:00';
-  return Math.floor(s / 60) + ':' + Math.floor(s % 60).toString().padStart(2, '0');
-}
+module.exports = function registerSocketHandlers(io) {
+  io.on('connection', (socket) => {
+    console.log(`[Socket] Connected: ${socket.id}`);
 
-const GRADIENTS = [
-  'linear-gradient(135deg,#6c5ce7,#fd79a8)',
-  'linear-gradient(135deg,#00cec9,#6c5ce7)',
-  'linear-gradient(135deg,#fd79a8,#f59e0b)',
-  'linear-gradient(135deg,#10b981,#6c5ce7)',
-  'linear-gradient(135deg,#f59e0b,#fd79a8)',
-];
+    let currentRoomId = null;
+    let currentUserName = null;
 
-export default function Player({
-  audioRef,
-  playlist,
-  currentSongIndex,
-  isPlaying,
-  // isHost,           // ✅ No longer needed
-  userName,
-  onPlay,
-  onPause,
-  onSeek,
-  onChangeSong,
-  onUpload,
-  setIsPlaying,
-}) {
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(80);
-  const fileInputRef = useRef(null);
+    // ─── ROOM EVENTS ───────────────────────────────────────────────────────────
 
-  const song = playlist[currentSongIndex] || null;
+    socket.on('createRoom', ({ roomId, userName }) => {
+      const room = createRoom(roomId, socket.id, userName);
+      socket.join(roomId);
+      currentRoomId = roomId;
+      currentUserName = userName;
 
-  // ── Load song when index changes ──
-  useEffect(() => {
-    if (!audioRef.current || !song) return;
-    audioRef.current.src = song.url;
-    audioRef.current.load();
-    audioRef.current.volume = volume / 100;
-    audioRef.current.play()
-      .then(() => setIsPlaying(true))
-      .catch(() => {});
-  }, [currentSongIndex, song?.url]);
-
-  // ── Audio event listeners ──
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onLoaded = () => setDuration(audio.duration);
-    const onEnded = () => {
-      setIsPlaying(false);
-      // ✅ Anyone can auto-advance (not just host)
-      if (playlist.length > 1) {
-        const next = (currentSongIndex + 1) % playlist.length;
-        onChangeSong(next);
-      }
-    };
-
-    audio.addEventListener('timeupdate', onTimeUpdate);
-    audio.addEventListener('loadedmetadata', onLoaded);
-    audio.addEventListener('ended', onEnded);
-
-    return () => {
-      audio.removeEventListener('timeupdate', onTimeUpdate);
-      audio.removeEventListener('loadedmetadata', onLoaded);
-      audio.removeEventListener('ended', onEnded);
-    };
-  }, [audioRef, currentSongIndex, playlist.length, onChangeSong]);
-
-  // ✅ REMOVED: No more host check
-  function handlePlayPause() {
-    if (!song) { toast('Upload a song first! 🎵'); return; }
-    const audio = audioRef.current;
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-      onPause(audio.currentTime);
-    } else {
-      audio.play().catch(() => {});
-      setIsPlaying(true);
-      onPlay(audio.currentTime, currentSongIndex);
-    }
-  }
-
-  // ✅ REMOVED: No more host check
-  function handleSeekChange(e) {
-    const audio = audioRef.current;
-    if (!audio || isNaN(audio.duration)) return;
-    const t = (e.target.value / 100) * audio.duration;
-    audio.currentTime = t;
-    setCurrentTime(t);
-    onSeek(t);
-  }
-
-  // ✅ REMOVED: No more host check
-  function handlePrev() {
-    if (playlist.length === 0) return;
-    onChangeSong((currentSongIndex - 1 + playlist.length) % playlist.length);
-  }
-
-  // ✅ REMOVED: No more host check
-  function handleNext() {
-    if (playlist.length === 0) return;
-    onChangeSong((currentSongIndex + 1) % playlist.length);
-  }
-
-  function handleVolumeChange(e) {
-    const v = Number(e.target.value);
-    setVolume(v);
-    if (audioRef.current) audioRef.current.volume = v / 100;
-  }
-
-  async function handleFileUpload(e) {
-    const files = Array.from(e.target.files);
-    for (const file of files) {
-      const url = URL.createObjectURL(file);
-      const name = file.name.replace(/\.[^.]+$/, '');
-      const dur = await new Promise(resolve => {
-        const tmp = new Audio(url);
-        tmp.addEventListener('loadedmetadata', () => resolve(tmp.duration));
-        tmp.load();
+      socket.emit('roomCreated', {
+        roomId,
+        participants: room.participants,
+        playlist: room.playlist,
+        isHost: true,
       });
-      onUpload({ name, url, type: file.type, uploader: userName, duration: formatTime(dur) });
-    }
-    e.target.value = '';
-  }
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+      console.log(`[Room] Created: ${roomId} by ${userName}`);
+    });
 
-  return (
-    <div className="bg-white rounded-2xl p-4 sm:p-5 border"
-      style={{ borderColor: 'rgba(108,92,231,0.13)', boxShadow: '0 2px 16px rgba(108,92,231,0.08)' }}>
+    socket.on('joinRoom', ({ roomId, userName }) => {
+      const room = getRoom(roomId);
 
-      {/* Song info */}
-      <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: song ? GRADIENTS[currentSongIndex % GRADIENTS.length] : '#ede9fe' }}>
-          <svg viewBox="0 0 24 24" fill="white" className="w-6 h-6 sm:w-7 sm:h-7">
-            <path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/>
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-bold text-sm sm:text-base truncate" style={{ color: '#1e1b4b' }}>
-            {song ? song.name : 'No song selected'}
-          </div>
-          <div className="text-xs sm:text-sm truncate" style={{ color: '#9ca3af' }}>
-            {song ? (song.type || 'Audio') : 'Upload a song to begin'}
-          </div>
-          {song && (
-            <div className="text-xs mt-0.5 font-medium" style={{ color: '#6c5ce7' }}>
-              ⬆ Uploaded by {song.uploader}
-            </div>
-          )}
-        </div>
-      </div>
+      if (!room) {
+        socket.emit('error', { message: 'Room not found. Check your room ID.' });
+        return;
+      }
 
-      {/* Seek bar — ✅ Everyone can seek now */}
-      <div className="mb-3 sm:mb-4">
-        <input
-          type="range" min="0" max="100" step="0.1"
-          value={progress}
-          onChange={handleSeekChange}
-          className="w-full h-1 rounded-full mb-1.5"
-          style={{ accentColor: '#6c5ce7', cursor: 'pointer', display: 'block' }}
-        />
-        <div className="flex justify-between text-xs" style={{ color: '#9ca3af' }}>
-          <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
-        </div>
-      </div>
+      const updatedRoom = addParticipant(roomId, socket.id, userName);
+      socket.join(roomId);
+      currentRoomId = roomId;
+      currentUserName = userName;
 
-      {/* Controls — ✅ Everyone can control */}
-      <div className="flex items-center justify-center gap-3 sm:gap-4 mb-3 sm:mb-4">
-        {/* Prev */}
-        <button onClick={handlePrev}
-          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center"
-          style={{ background: '#f5f3ff', border: 'none', cursor: 'pointer' }}
-          title="Previous">
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#6c5ce7">
-            <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6L9.5 12z"/>
-          </svg>
-        </button>
+      const liveTime = getLiveCurrentTime(updatedRoom);
 
-        {/* Play/Pause */}
-        <button onClick={handlePlayPause}
-          className="w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center"
-          style={{
-            background: '#6c5ce7',
-            border: 'none', cursor: 'pointer',
-            boxShadow: '0 4px 18px rgba(108,92,231,0.4)',
-          }}>
-          {isPlaying
-            ? <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5 sm:w-6 sm:h-6"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-            : <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5 sm:w-6 sm:h-6"><path d="M8 5v14l11-7z"/></svg>
-          }
-        </button>
+      socket.emit('roomJoined', {
+        roomId,
+        participants: updatedRoom.participants,
+        playlist: updatedRoom.playlist,
+        isHost: false,
+        sync: {
+          currentSongIndex: updatedRoom.currentSongIndex,
+          isPlaying: updatedRoom.isPlaying,
+          currentTime: liveTime,
+        },
+      });
 
-        {/* Next */}
-        <button onClick={handleNext}
-          className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center"
-          style={{ background: '#f5f3ff', border: 'none', cursor: 'pointer' }}
-          title="Next">
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="#6c5ce7">
-            <path d="M6 18l8.5-6L6 6v12zm2.5-6l6-4.5v9L8.5 12zM16 6h2v12h-2V6z"/>
-          </svg>
-        </button>
-      </div>
+      socket.to(roomId).emit('userJoined', {
+        user: { id: socket.id, name: userName, isHost: false },
+        participants: updatedRoom.participants,
+      });
 
-      {/* Volume */}
-      <div className="flex items-center gap-3 mb-3 sm:mb-4">
-        <span className="text-base">🔈</span>
-        <input type="range" min="0" max="100" value={volume}
-          onChange={handleVolumeChange}
-          className="flex-1"
-          style={{ accentColor: '#6c5ce7', cursor: 'pointer' }}
-        />
-        <span className="text-base">🔊</span>
-      </div>
+      console.log(`[Room] ${userName} joined: ${roomId} (sync time: ${liveTime.toFixed(2)}s)`);
+    });
 
-      {/* ✅ REMOVED: Host lock notice — no longer needed */}
+    // ─── MUSIC SYNC EVENTS ─────────────────────────────────────────────────────
 
-      {/* Upload — ✅ Everyone can upload */}
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        className="border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"
-        style={{ borderColor: '#c4b5fd' }}>
-        <div className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>⬆ Upload MP3</div>
-        <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>Click to add songs · MP3, WAV, OGG</div>
-      </div>
-      <input ref={fileInputRef} type="file" accept="audio/*" multiple
-        onChange={handleFileUpload} style={{ display: 'none' }} />
+    socket.on('play', ({ currentTime, songIndex }) => {
+      if (!currentRoomId) return;
+      updatePlayback(currentRoomId, { isPlaying: true, currentTime, currentSongIndex: songIndex });
+      socket.to(currentRoomId).emit('play', { currentTime, songIndex });
+      console.log(`[Music] Play in ${currentRoomId} at ${currentTime}s by ${currentUserName}`);
+    });
 
-      {/* Hidden audio element */}
-      <audio ref={audioRef} style={{ display: 'none' }} />
-    </div>
-  );
-}
+    socket.on('pause', ({ currentTime }) => {
+      if (!currentRoomId) return;
+      updatePlayback(currentRoomId, { isPlaying: false, currentTime });
+      socket.to(currentRoomId).emit('pause', { currentTime });
+      console.log(`[Music] Pause in ${currentRoomId} at ${currentTime}s by ${currentUserName}`);
+    });
+
+    socket.on('seek', ({ currentTime }) => {
+      if (!currentRoomId) return;
+      const room = getRoom(currentRoomId);
+      updatePlayback(currentRoomId, { currentTime, isPlaying: room?.isPlaying });
+      socket.to(currentRoomId).emit('seek', { currentTime });
+      console.log(`[Music] Seek in ${currentRoomId} to ${currentTime}s by ${currentUserName}`);
+    });
+
+    socket.on('changeSong', ({ songIndex, currentTime = 0 }) => {
+      if (!currentRoomId) return;
+      updatePlayback(currentRoomId, { currentSongIndex: songIndex, currentTime, isPlaying: true });
+      socket.to(currentRoomId).emit('changeSong', { songIndex, currentTime });
+      console.log(`[Music] ChangeSong in ${currentRoomId} to index ${songIndex} by ${currentUserName}`);
+    });
+
+    // ─── PLAYLIST EVENTS ────────────────────────────────────────────────────────
+
+    socket.on('uploadSong', (song) => {
+      if (!currentRoomId) return;
+      const updatedRoom = addSong(currentRoomId, { ...song, uploadedAt: Date.now() });
+      if (!updatedRoom) return;
+      io.to(currentRoomId).emit('songAdded', {
+        song,
+        playlist: updatedRoom.playlist,
+      });
+      console.log(`[Playlist] Song added in ${currentRoomId}: ${song.name} by ${currentUserName}`);
+    });
+
+    socket.on('removeSong', ({ songIndex }) => {
+      if (!currentRoomId) return;
+      const updatedRoom = removeSong(currentRoomId, songIndex);
+      if (!updatedRoom) return;
+      io.to(currentRoomId).emit('songRemoved', {
+        songIndex,
+        playlist: updatedRoom.playlist,
+        currentSongIndex: updatedRoom.currentSongIndex,
+      });
+      console.log(`[Playlist] Song removed in ${currentRoomId} at index ${songIndex} by ${currentUserName}`);
+    });
+
+    // ─── CHAT EVENTS ────────────────────────────────────────────────────────────
+
+    socket.on('sendMessage', ({ text, userName }) => {
+      if (!currentRoomId) return;
+      const message = {
+        id: Date.now(),
+        text,
+        userName,
+        timestamp: new Date().toISOString(),
+      };
+      io.to(currentRoomId).emit('receiveMessage', message);
+    });
+
+    // ─── ACTIVITY EVENTS ────────────────────────────────────────────────────────
+
+    socket.on('activity', ({ icon, text }) => {
+      if (!currentRoomId) return;
+      socket.to(currentRoomId).emit('activity', { icon, text, timestamp: new Date().toISOString() });
+    });
+
+    // ─── DISCONNECT ─────────────────────────────────────────────────────────────
+
+    socket.on('disconnect', () => {
+      if (!currentRoomId) return;
+
+      const result = removeParticipant(currentRoomId, socket.id);
+
+      if (!result) return;
+
+      const { room, wasHost } = result;
+
+      if (!room) {
+        console.log(`[Room] ${currentRoomId} deleted (all users left)`);
+        return;
+      }
+
+      io.to(currentRoomId).emit('userLeft', {
+        userId: socket.id,
+        userName: currentUserName,
+        participants: room.participants,
+        newHostName: wasHost ? room.participants[0]?.name : null,
+      });
+
+      console.log(`[Room] ${currentUserName} left ${currentRoomId}`);
+    });
+  });
+};
