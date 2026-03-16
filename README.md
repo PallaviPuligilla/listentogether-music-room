@@ -34,14 +34,14 @@ listentogether
 ## Run Locally
 
 ### Start Server
-cd server
-npm install
-npm start
+- cd server
+- npm install
+- npm start
 
 ### Start Client
-cd client
-npm install
-npm run dev
+- cd client
+- npm install
+- npm run dev
 
 Open in browser:
 http://localhost:5173
