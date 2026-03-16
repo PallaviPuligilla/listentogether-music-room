@@ -14,7 +14,7 @@ export default function Home() {
   const [createName, setCreateName] = useState('');
   const [joinName, setJoinName] = useState('');
   const [joinId, setJoinId] = useState('');
-  const generatedId = genRoomId();
+  const [generatedId] = useState(() => genRoomId());
 
   function handleCreate() {
     if (!createName.trim()) { toast.error('Please enter your name'); return; }
