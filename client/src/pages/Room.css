@@ -1,0 +1,277 @@
+/* pages/Room.css — Responsive layout for Room page */
+
+/* ══════════════════════════════════════════════════
+   NAV BAR
+   ══════════════════════════════════════════════════ */
+
+.room-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: white;
+  border-bottom: 1px solid rgba(108, 92, 231, 0.13);
+  height: 60px;
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.nav-logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #6c5ce7;
+  flex-shrink: 0;
+}
+
+.nav-roomid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: #ede9fe;
+}
+
+.nav-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: pulse-dot 1.5s infinite;
+}
+
+.nav-roomid-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #6c5ce7;
+  letter-spacing: 0.5px;
+}
+
+.nav-copy-btn {
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  background: #6c5ce7;
+  border: none;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.nav-synced-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 50px;
+  background: #d1fae5;
+  color: #065f46;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-leave-btn {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+
+/* ══════════════════════════════════════════════════
+   MOBILE TABS — Hidden on desktop
+   ══════════════════════════════════════════════════ */
+
+.mobile-tabs {
+  display: none;
+}
+
+
+/* ══════════════════════════════════════════════════
+   ROOM BODY — 3 Column Grid (Desktop)
+   ══════════════════════════════════════════════════ */
+
+.room-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr 220px;
+  height: calc(100vh - 60px);
+  overflow: hidden;
+}
+
+.room-panel-left {
+  overflow-y: auto;
+  padding: 20px;
+  background: white;
+  border-right: 1px solid rgba(108, 92, 231, 0.13);
+}
+
+.room-panel-center {
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #f5f3ff;
+}
+
+.room-panel-right {
+  overflow-y: auto;
+  padding: 20px;
+  background: white;
+  border-left: 1px solid rgba(108, 92, 231, 0.13);
+}
+
+
+/* ══════════════════════════════════════════════════
+   TABLET — max-width: 1023px
+   ══════════════════════════════════════════════════ */
+
+@media (max-width: 1023px) {
+
+  /* Show mobile tabs */
+  .mobile-tabs {
+    display: flex;
+    background: white;
+    border-bottom: 1px solid rgba(108, 92, 231, 0.13);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .mobile-tabs button {
+    flex: 1;
+    padding: 12px 8px;
+    border: none;
+    background: white;
+    font-size: 13px;
+    font-weight: 600;
+    color: #9ca3af;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    font-family: inherit;
+    transition: all 0.2s ease;
+  }
+
+  .mobile-tabs button.active {
+    color: #6c5ce7;
+    border-bottom-color: #6c5ce7;
+    background: #f5f3ff;
+  }
+
+  /* Body becomes single column */
+  .room-body {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 108px);
+    overflow-y: auto;
+  }
+
+  /* Hide inactive panels on mobile */
+  .room-panel.mobile-hidden {
+    display: none !important;
+  }
+
+  /* Remove borders, make panels fill space */
+  .room-panel-left,
+  .room-panel-center,
+  .room-panel-right {
+    border: none;
+    flex: 1;
+    min-height: calc(100vh - 120px);
+    padding: 16px;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════
+   MOBILE — max-width: 640px
+   ══════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+
+  /* Compact nav */
+  .room-nav {
+    padding: 8px 12px;
+    height: auto;
+    min-height: 50px;
+    gap: 8px;
+  }
+
+  /* Hide logo text, show only icon */
+  .nav-logo-text {
+    display: none;
+  }
+
+  /* Smaller room ID badge */
+  .nav-roomid {
+    padding: 4px 10px;
+    gap: 6px;
+  }
+
+  .nav-roomid-text {
+    font-size: 12px;
+  }
+
+  /* Hide copy button on very small screens */
+  .nav-copy-btn {
+    padding: 2px 8px;
+    font-size: 10px;
+  }
+
+  /* Hide synced badge */
+  .nav-synced-badge {
+    display: none;
+  }
+
+  /* Smaller leave button */
+  .nav-leave-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  /* Smaller tab text */
+  .mobile-tabs button {
+    font-size: 12px;
+    padding: 10px 4px;
+  }
+
+  /* Less panel padding */
+  .room-panel-left,
+  .room-panel-center,
+  .room-panel-right {
+    padding: 12px;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════
+   VERY SMALL SCREENS — max-width: 380px
+   ══════════════════════════════════════════════════ */
+
+@media (max-width: 380px) {
+  .nav-copy-btn {
+    display: none;
+  }
+
+  .mobile-tabs button {
+    font-size: 11px;
+    padding: 8px 2px;
+  }
+}

@@ -1,4 +1,4 @@
-// pages/Room.jsx — Main room page: connects socket, manages shared state
+// pages/Room.jsx — Main room page (RESPONSIVE)
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -10,6 +10,7 @@ import Visualizer from '../components/Visualizer/Visualizer';
 import Player from '../components/Player/Player';
 import Playlist from '../components/Playlist/Playlist';
 import Chat from '../components/Chat/Chat';
+import './Room.css'; // ✅ NEW: Import responsive styles
 
 export default function Room() {
   const { roomId } = useParams();
@@ -26,7 +27,9 @@ export default function Room() {
   const [messages, setMessages] = useState([]);
   const [connected, setConnected] = useState(false);
 
-  // Ref to the <audio> element — shared across Player & Visualizer
+  // ✅ NEW: Mobile tab state
+  const [mobileTab, setMobileTab] = useState('player');
+
   const audioRef = useRef(null);
 
   // ─── ACTIVITY HELPER ────────────────────────────────────────────────────────
@@ -44,17 +47,13 @@ export default function Room() {
     setUser(userData);
     setIsHost(userData.isHost);
 
-    // Connect socket
     socket.connect();
 
-    // Emit create or join
     if (userData.isHost) {
       socket.emit('createRoom', { roomId, userName: userData.name });
     } else {
       socket.emit('joinRoom', { roomId, userName: userData.name });
     }
-
-    // ── Incoming Events ──
 
     socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
@@ -70,11 +69,9 @@ export default function Room() {
       setPlaylist(playlist);
       addActivity('👋', userData.name + ' joined the room');
 
-      // ── Playback sync: jump to current timestamp ──
       if (sync && sync.currentSongIndex >= 0 && playlist[sync.currentSongIndex]) {
         setCurrentSongIndex(sync.currentSongIndex);
         setIsPlaying(sync.isPlaying);
-        // The Player component watches these and will load + seek
         setTimeout(() => {
           if (audioRef.current && sync.currentTime > 0) {
             audioRef.current.currentTime = sync.currentTime;
@@ -97,7 +94,6 @@ export default function Room() {
       if (newHostName) {
         addActivity('👑', newHostName + ' is now the host');
         toast(`👑 ${newHostName} is now the host`);
-        // If WE are the new host
         if (newHostName === userData.name) {
           setIsHost(true);
           toast.success("You're now the host!", { duration: 4000 });
@@ -105,7 +101,6 @@ export default function Room() {
       }
     });
 
-    // Music events
     socket.on('play', ({ currentTime, songIndex }) => {
       if (songIndex !== undefined) setCurrentSongIndex(songIndex);
       setIsPlaying(true);
@@ -167,7 +162,7 @@ export default function Room() {
     return () => {
       socket.emit('activity', { icon: '👋', text: userData.name + ' left the room' });
       socket.disconnect();
-      socket.off(); // Remove all listeners
+      socket.off();
     };
   }, [roomId, navigate, addActivity]);
 
@@ -199,7 +194,6 @@ export default function Room() {
 
   function handleSongUpload(song) {
     const updatedPlaylist = [...playlist, song];
-    // Optimistic update
     setPlaylist(updatedPlaylist);
     socket.emit('uploadSong', song);
     addActivity('🎵', `${user.name} uploaded "${song.name}"`);
@@ -226,50 +220,69 @@ export default function Room() {
 
   return (
     <div className="flex flex-col" style={{ minHeight: '100vh', background: '#f5f3ff' }}>
-      {/* NAV */}
-      <nav className="flex items-center justify-between px-6 h-15 bg-white border-b gap-4"
-        style={{ borderColor: 'rgba(108,92,231,0.13)', height: '60px', flexShrink: 0 }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: '#6c5ce7' }}>
-            <svg viewBox="0 0 24 24" fill="white" className="w-5 h-5"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg>
+
+      {/* ════════ NAV (RESPONSIVE) ════════ */}
+      <nav className="room-nav">
+        {/* Logo */}
+        <div className="flex items-center gap-2">
+          <div className="nav-logo-icon">
+            <svg viewBox="0 0 24 24" fill="white" width="20" height="20">
+              <path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/>
+            </svg>
           </div>
-          <span className="font-bold text-lg" style={{ color: '#1e1b4b' }}>
+          <span className="nav-logo-text font-bold text-lg" style={{ color: '#1e1b4b' }}>
             Listen<span style={{ color: '#6c5ce7' }}>Together</span>
           </span>
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-1.5 rounded-lg" style={{ background: '#ede9fe' }}>
-          <div className="w-2 h-2 rounded-full bg-green-400" style={{ animation: 'pulse-dot 1.5s infinite' }} />
-          <span className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>{roomId}</span>
-          <button onClick={copyRoomId}
-            className="text-xs font-bold text-white px-2.5 py-0.5 rounded-md ml-1"
-            style={{ background: '#6c5ce7', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-            Copy
-          </button>
+        {/* Room ID Badge */}
+        <div className="nav-roomid">
+          <div className="nav-pulse-dot" />
+          <span className="nav-roomid-text">{roomId}</span>
+          <button onClick={copyRoomId} className="nav-copy-btn">Copy</button>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Right side */}
+        <div className="flex items-center gap-2">
           {connected && (
-            <span className="text-xs font-semibold px-3 py-1 rounded-full flex items-center gap-1.5"
-              style={{ background: '#d1fae5', color: '#065f46' }}>
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500" style={{ animation: 'pulse-dot 1.2s infinite' }} />
+            <span className="nav-synced-badge">
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
               Synced
             </span>
           )}
-          <button onClick={handleLeave}
-            className="text-sm font-semibold px-4 py-2 rounded-lg"
-            style={{ background: '#fee2e2', color: '#dc2626', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-            Leave Room
+          <button onClick={handleLeave} className="nav-leave-btn">
+            Leave
           </button>
         </div>
       </nav>
 
-      {/* BODY — 3 panels */}
-      <div className="flex-1 grid overflow-hidden"
-        style={{ gridTemplateColumns: '240px 1fr 220px', height: 'calc(100vh - 60px)' }}>
+      {/* ════════ MOBILE TABS (hidden on desktop) ════════ */}
+      <div className="mobile-tabs">
+        <button
+          className={mobileTab === 'people' ? 'active' : ''}
+          onClick={() => setMobileTab('people')}
+        >
+          👥 People ({participants.length})
+        </button>
+        <button
+          className={mobileTab === 'player' ? 'active' : ''}
+          onClick={() => setMobileTab('player')}
+        >
+          🎵 Player
+        </button>
+        <button
+          className={mobileTab === 'playlist' ? 'active' : ''}
+          onClick={() => setMobileTab('playlist')}
+        >
+          📋 Queue ({playlist.length})
+        </button>
+      </div>
 
-        {/* LEFT PANEL */}
-        <div className="overflow-y-auto p-5 bg-white border-r" style={{ borderColor: 'rgba(108,92,231,0.13)' }}>
+      {/* ════════ BODY — 3 panels (responsive) ════════ */}
+      <div className="room-body">
+
+        {/* LEFT PANEL — Participants */}
+        <div className={`room-panel room-panel-left ${mobileTab !== 'people' ? 'mobile-hidden' : ''}`}>
           <Participants
             participants={participants}
             currentUser={user.name}
@@ -278,8 +291,8 @@ export default function Room() {
           />
         </div>
 
-        {/* CENTER PANEL */}
-        <div className="overflow-y-auto p-5 flex flex-col gap-4" style={{ background: '#f5f3ff' }}>
+        {/* CENTER PANEL — Player & Chat */}
+        <div className={`room-panel room-panel-center ${mobileTab !== 'player' ? 'mobile-hidden' : ''}`}>
           <ActivityLog activities={activities} />
           <Visualizer audioRef={audioRef} isPlaying={isPlaying} />
           <Player
@@ -303,8 +316,8 @@ export default function Room() {
           />
         </div>
 
-        {/* RIGHT PANEL */}
-        <div className="overflow-y-auto p-5 bg-white border-l" style={{ borderColor: 'rgba(108,92,231,0.13)' }}>
+        {/* RIGHT PANEL — Playlist */}
+        <div className={`room-panel room-panel-right ${mobileTab !== 'playlist' ? 'mobile-hidden' : ''}`}>
           <Playlist
             playlist={playlist}
             currentSongIndex={currentSongIndex}
