@@ -347,12 +347,6 @@ socket.on('play', ({ currentTime, songIndex }) => {
     onAddSong={handleSearchAddSong}
     userName={user.name}
   />
-
-  <Chat
-    messages={messages}
-    currentUser={user.name}
-    onSendMessage={handleSendMessage}
-  />
 </div>
           <Chat
             messages={messages}
