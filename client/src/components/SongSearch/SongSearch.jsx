@@ -1,5 +1,3 @@
-// components/SongSearch/SongSearch.jsx — Search & play full songs
-
 import React, { useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 
@@ -21,7 +19,6 @@ export default function SongSearch({ onAddSong, userName }) {
 
   function handleSearch(value) {
     setQuery(value);
-
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
     if (!value.trim()) {
@@ -36,6 +33,7 @@ export default function SongSearch({ onAddSong, userName }) {
           `${SERVER_URL}/api/search?q=${encodeURIComponent(value)}`
         );
         const data = await res.json();
+        console.log('🔍 Search results:', data.data);
         setResults(data.data || []);
       } catch (err) {
         console.error('Search error:', err);
@@ -48,9 +46,11 @@ export default function SongSearch({ onAddSong, userName }) {
 
   function handleAddSong(song) {
     if (!song.url) {
-      toast.error('This song is not available for streaming.');
+      toast.error(`"${song.name}" is not available. Try another song.`);
       return;
     }
+
+    console.log('✅ Adding song:', song.name, song.url);
 
     onAddSong({
       name: song.name,
@@ -63,7 +63,7 @@ export default function SongSearch({ onAddSong, userName }) {
       album: song.album,
     });
 
-    toast.success(`Added "${song.name}" by ${song.artist}!`);
+    toast.success(`Added "${song.name}"!`);
     setQuery('');
     setResults([]);
     setShowSearch(false);
@@ -74,7 +74,7 @@ export default function SongSearch({ onAddSong, userName }) {
       <button
         onClick={() => setShowSearch(true)}
         className="w-full border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"
-        style={{ borderColor: '#c4b5fd', background: 'white', fontFamily: 'inherit' }}>
+        style={{ borderColor: '#c4b5fd', background: 'white', fontFamily: 'inherit', border: '2px dashed #c4b5fd' }}>
         <div className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>
           🔍 Search Songs
         </div>
@@ -132,6 +132,7 @@ export default function SongSearch({ onAddSong, userName }) {
           <div
             key={song.id}
             className="flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors hover:bg-purple-50"
+            style={{ opacity: song.url ? 1 : 0.5 }}
             onClick={() => handleAddSong(song)}
           >
             {/* Album Art */}
@@ -143,14 +144,13 @@ export default function SongSearch({ onAddSong, userName }) {
                 style={{ background: '#ede9fe' }}
                 onError={(e) => {
                   e.target.onerror = null;
-                  e.target.src = '';
                   e.target.style.display = 'none';
                 }}
               />
             ) : (
               <div className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0"
                 style={{ background: '#ede9fe' }}>
-                <span>🎵</span>
+                🎵
               </div>
             )}
 
@@ -162,30 +162,24 @@ export default function SongSearch({ onAddSong, userName }) {
               <div className="text-xs truncate" style={{ color: '#9ca3af' }}>
                 {song.artist} · {formatDuration(song.duration)}
               </div>
-              {song.album && (
-                <div className="text-xs truncate" style={{ color: '#c4b5fd' }}>
-                  {song.album}
-                </div>
-              )}
             </div>
 
             {/* Add Button */}
-            <button
-              className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
-              style={{ background: '#6c5ce7', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-              onClick={(e) => { e.stopPropagation(); handleAddSong(song); }}>
-              + Add
-            </button>
+            {song.url ? (
+              <button
+                className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
+                style={{ background: '#6c5ce7', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                onClick={(e) => { e.stopPropagation(); handleAddSong(song); }}>
+                + Add
+              </button>
+            ) : (
+              <span className="text-xs flex-shrink-0" style={{ color: '#d1d5db' }}>
+                N/A
+              </span>
+            )}
           </div>
         ))}
       </div>
-
-      {/* Footer */}
-      {results.length > 0 && (
-        <div className="text-xs text-center mt-2 pt-2 border-t" style={{ color: '#9ca3af', borderColor: '#ede9fe' }}>
-          🎵 Full songs · Click to add to room playlist
-        </div>
-      )}
     </div>
   );
 }
