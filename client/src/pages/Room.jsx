@@ -328,19 +328,6 @@ socket.on('play', ({ currentTime, songIndex }) => {
 <div className={`room-panel room-panel-center ${mobileTab !== 'player' ? 'mobile-hidden' : ''}`}>
   <ActivityLog activities={activities} />
   <Visualizer audioRef={audioRef} isPlaying={isPlaying} />
-  <Player
-    audioRef={audioRef}
-    playlist={playlist}
-    currentSongIndex={currentSongIndex}
-    isPlaying={isPlaying}
-    userName={user.name}
-    onPlay={handlePlay}
-    onPause={handlePause}
-    onSeek={handleSeek}
-    onChangeSong={handleChangeSong}
-    onUpload={handleSongUpload}
-    setIsPlaying={setIsPlaying}
-  />
   
   {/* ✅ NEW: Song Search */}
   <SongSearch
