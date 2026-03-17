@@ -15,6 +15,7 @@ export default function SongSearch({ onAddSong, userName }) {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [stats, setStats] = useState(null);
   const searchTimeout = useRef(null);
 
   function handleSearch(value) {
@@ -23,6 +24,7 @@ export default function SongSearch({ onAddSong, userName }) {
 
     if (!value.trim()) {
       setResults([]);
+      setStats(null);
       return;
     }
 
@@ -33,8 +35,8 @@ export default function SongSearch({ onAddSong, userName }) {
           `${SERVER_URL}/api/search?q=${encodeURIComponent(value)}`
         );
         const data = await res.json();
-        console.log('🔍 Results:', data.data?.length);
         setResults(data.data || []);
+        setStats(data.stats || null);
       } catch (err) {
         console.error('Search error:', err);
         toast.error('Search failed');
@@ -50,6 +52,7 @@ export default function SongSearch({ onAddSong, userName }) {
       return;
     }
 
+    const label = song.isPreview ? ' (30s preview)' : '';
     onAddSong({
       name: `${song.name} — ${song.artist}`,
       url: song.url,
@@ -61,7 +64,7 @@ export default function SongSearch({ onAddSong, userName }) {
       album: song.album,
     });
 
-    toast.success(`Added "${song.name}"! (30s preview)`);
+    toast.success(`Added "${song.name}"!${label}`);
     setQuery('');
     setResults([]);
     setShowSearch(false);
@@ -77,7 +80,7 @@ export default function SongSearch({ onAddSong, userName }) {
           🔍 Search Songs
         </div>
         <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
-          Search millions of songs · Preview & discover
+          Search millions of songs · Free
         </div>
       </button>
     );
@@ -88,11 +91,9 @@ export default function SongSearch({ onAddSong, userName }) {
       style={{ borderColor: 'rgba(108,92,231,0.13)', boxShadow: '0 2px 16px rgba(108,92,231,0.08)' }}>
 
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-sm" style={{ color: '#1e1b4b' }}>
-          🔍 Search Songs
-        </h3>
+        <h3 className="font-bold text-sm" style={{ color: '#1e1b4b' }}>🔍 Search Songs</h3>
         <button
-          onClick={() => { setShowSearch(false); setResults([]); setQuery(''); }}
+          onClick={() => { setShowSearch(false); setResults([]); setQuery(''); setStats(null); }}
           className="text-xs font-semibold px-3 py-1 rounded-lg"
           style={{ background: '#f5f3ff', color: '#6c5ce7', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
           ✕ Close
@@ -116,9 +117,14 @@ export default function SongSearch({ onAddSong, userName }) {
         )}
       </div>
 
-      <div className="text-xs mb-2 px-1" style={{ color: '#9ca3af' }}>
-        🎵 30-second previews · Upload MP3 for full songs
-      </div>
+      {/* Stats */}
+      {stats && results.length > 0 && (
+        <div className="text-xs mb-2 px-1" style={{ color: '#9ca3af' }}>
+          {stats.fullSongs > 0
+            ? `🎵 ${stats.fullSongs} full songs + ${stats.previews} previews`
+            : '🎵 30-second previews · Upload MP3 for full songs'}
+        </div>
+      )}
 
       <div className="max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         {results.length === 0 && query && !searching && (
@@ -131,6 +137,7 @@ export default function SongSearch({ onAddSong, userName }) {
           <div
             key={song.id}
             className="flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors hover:bg-purple-50"
+            style={{ opacity: song.hasUrl ? 1 : 0.4 }}
             onClick={() => handleAddSong(song)}
           >
             {song.cover ? (
@@ -152,16 +159,27 @@ export default function SongSearch({ onAddSong, userName }) {
               </div>
               <div className="text-xs truncate" style={{ color: '#9ca3af' }}>
                 {song.artist} · {formatDuration(song.duration)}
+                {song.isPreview && ' · 30s'}
               </div>
             </div>
 
             {song.hasUrl ? (
-              <button
-                className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
-                style={{ background: '#6c5ce7', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-                onClick={(e) => { e.stopPropagation(); handleAddSong(song); }}>
-                + Add
-              </button>
+              <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                <button
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg"
+                  style={{
+                    background: song.isPreview ? '#8b5cf6' : '#6c5ce7',
+                    color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                  onClick={(e) => { e.stopPropagation(); handleAddSong(song); }}>
+                  + Add
+                </button>
+                {!song.isPreview && (
+                  <span className="text-xs font-medium" style={{ color: '#10b981' }}>
+                    Full song ✓
+                  </span>
+                )}
+              </div>
             ) : (
               <span className="text-xs flex-shrink-0 px-2 py-1 rounded"
                 style={{ color: '#9ca3af', background: '#f3f4f6' }}>N/A</span>
