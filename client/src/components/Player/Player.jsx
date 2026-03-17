@@ -1,7 +1,8 @@
-// components/Player/Player.jsx — Music player (ALL USERS CAN CONTROL)
+// components/Player/Player.jsx — Music player with Cloudinary upload
 
 import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import { uploadAudio, formatDuration } from '../../utils/cloudinaryUpload';
 
 function formatTime(s) {
   if (!s || isNaN(s)) return '0:00';
@@ -21,7 +22,6 @@ export default function Player({
   playlist,
   currentSongIndex,
   isPlaying,
-  // isHost,           // ✅ No longer needed
   userName,
   onPlay,
   onPause,
@@ -33,11 +33,12 @@ export default function Player({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(80);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
   const song = playlist[currentSongIndex] || null;
 
-  // ── Load song when index changes ──
   useEffect(() => {
     if (!audioRef.current || !song) return;
     audioRef.current.src = song.url;
@@ -48,7 +49,6 @@ export default function Player({
       .catch(() => {});
   }, [currentSongIndex, song?.url]);
 
-  // ── Audio event listeners ──
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -57,7 +57,6 @@ export default function Player({
     const onLoaded = () => setDuration(audio.duration);
     const onEnded = () => {
       setIsPlaying(false);
-      // ✅ Anyone can auto-advance (not just host)
       if (playlist.length > 1) {
         const next = (currentSongIndex + 1) % playlist.length;
         onChangeSong(next);
@@ -75,7 +74,6 @@ export default function Player({
     };
   }, [audioRef, currentSongIndex, playlist.length, onChangeSong]);
 
-  // ✅ REMOVED: No more host check
   function handlePlayPause() {
     if (!song) { toast('Upload a song first! 🎵'); return; }
     const audio = audioRef.current;
@@ -90,7 +88,6 @@ export default function Player({
     }
   }
 
-  // ✅ REMOVED: No more host check
   function handleSeekChange(e) {
     const audio = audioRef.current;
     if (!audio || isNaN(audio.duration)) return;
@@ -100,13 +97,11 @@ export default function Player({
     onSeek(t);
   }
 
-  // ✅ REMOVED: No more host check
   function handlePrev() {
     if (playlist.length === 0) return;
     onChangeSong((currentSongIndex - 1 + playlist.length) % playlist.length);
   }
 
-  // ✅ REMOVED: No more host check
   function handleNext() {
     if (playlist.length === 0) return;
     onChangeSong((currentSongIndex + 1) % playlist.length);
@@ -118,18 +113,55 @@ export default function Player({
     if (audioRef.current) audioRef.current.volume = v / 100;
   }
 
+  // ✅ NEW: Upload to Cloudinary — creates public URL for ALL users
   async function handleFileUpload(e) {
     const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setUploading(true);
+
     for (const file of files) {
-      const url = URL.createObjectURL(file);
+      if (file.size > 25 * 1024 * 1024) {
+        toast.error(`"${file.name}" is too large. Max 25MB.`);
+        continue;
+      }
+
+      if (!file.type.startsWith('audio/')) {
+        toast.error(`"${file.name}" is not an audio file.`);
+        continue;
+      }
+
       const name = file.name.replace(/\.[^.]+$/, '');
-      const dur = await new Promise(resolve => {
-        const tmp = new Audio(url);
-        tmp.addEventListener('loadedmetadata', () => resolve(tmp.duration));
-        tmp.load();
-      });
-      onUpload({ name, url, type: file.type, uploader: userName, duration: formatTime(dur) });
+
+      try {
+        toast.loading(`Uploading "${name}" to cloud...`, { id: 'upload-' + name });
+        setUploadProgress(0);
+
+        // ✅ Upload to Cloudinary — returns public URL!
+        const result = await uploadAudio(file, (progress) => {
+          setUploadProgress(progress);
+        });
+
+        toast.success(`"${name}" uploaded!`, { id: 'upload-' + name });
+        console.log('✅ Cloudinary URL:', result.url);
+
+        // ✅ Send Cloudinary URL — works for ALL users!
+        onUpload({
+          name,
+          url: result.url,
+          type: file.type,
+          uploader: userName,
+          duration: formatDuration(result.duration),
+        });
+
+      } catch (err) {
+        console.error('Upload error:', err);
+        toast.error(`Failed to upload "${name}": ${err.message}`, { id: 'upload-' + name });
+      }
     }
+
+    setUploading(false);
+    setUploadProgress(0);
     e.target.value = '';
   }
 
@@ -162,7 +194,7 @@ export default function Player({
         </div>
       </div>
 
-      {/* Seek bar — ✅ Everyone can seek now */}
+      {/* Seek bar */}
       <div className="mb-3 sm:mb-4">
         <input
           type="range" min="0" max="100" step="0.1"
@@ -177,9 +209,8 @@ export default function Player({
         </div>
       </div>
 
-      {/* Controls — ✅ Everyone can control */}
+      {/* Controls */}
       <div className="flex items-center justify-center gap-3 sm:gap-4 mb-3 sm:mb-4">
-        {/* Prev */}
         <button onClick={handlePrev}
           className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center"
           style={{ background: '#f5f3ff', border: 'none', cursor: 'pointer' }}
@@ -189,7 +220,6 @@ export default function Player({
           </svg>
         </button>
 
-        {/* Play/Pause */}
         <button onClick={handlePlayPause}
           className="w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center"
           style={{
@@ -203,7 +233,6 @@ export default function Player({
           }
         </button>
 
-        {/* Next */}
         <button onClick={handleNext}
           className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center"
           style={{ background: '#f5f3ff', border: 'none', cursor: 'pointer' }}
@@ -225,20 +254,43 @@ export default function Player({
         <span className="text-base">🔊</span>
       </div>
 
-      {/* ✅ REMOVED: Host lock notice — no longer needed */}
+      {/* ✅ Upload with progress bar */}
+      {uploading ? (
+        <div className="border-2 rounded-xl p-4 text-center"
+          style={{ borderColor: '#6c5ce7', background: '#f5f3ff' }}>
+          <div className="text-sm font-semibold mb-2" style={{ color: '#6c5ce7' }}>
+            ⬆ Uploading... {uploadProgress}%
+          </div>
+          <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: '#ede9fe' }}>
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${uploadProgress}%`,
+                background: 'linear-gradient(90deg, #6c5ce7, #a29bfe)',
+              }}
+            />
+          </div>
+          <div className="text-xs mt-2" style={{ color: '#9ca3af' }}>
+            Please wait while the song uploads to cloud...
+          </div>
+        </div>
+      ) : (
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"
+          style={{ borderColor: '#c4b5fd' }}>
+          <div className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>⬆ Upload MP3</div>
+          <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
+            Click to add songs · MP3, WAV, OGG · Max 25MB
+          </div>
+        </div>
+      )}
 
-      {/* Upload — ✅ Everyone can upload */}
-      <div
-        onClick={() => fileInputRef.current?.click()}
-        className="border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"
-        style={{ borderColor: '#c4b5fd' }}>
-        <div className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>⬆ Upload MP3</div>
-        <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>Click to add songs · MP3, WAV, OGG</div>
-      </div>
       <input ref={fileInputRef} type="file" accept="audio/*" multiple
-        onChange={handleFileUpload} style={{ display: 'none' }} />
+        onChange={handleFileUpload} style={{ display: 'none' }}
+        disabled={uploading}
+      />
 
-      {/* Hidden audio element */}
       <audio ref={audioRef} style={{ display: 'none' }} />
     </div>
   );
