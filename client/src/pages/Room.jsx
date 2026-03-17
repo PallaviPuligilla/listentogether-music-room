@@ -11,6 +11,7 @@ import Player from '../components/Player/Player';
 import Playlist from '../components/Playlist/Playlist';
 import Chat from '../components/Chat/Chat';
 import './Room.css'; // ✅ NEW: Import responsive styles
+import SongSearch from '../components/SongSearch/SongSearch';
 
 export default function Room() {
   const { roomId } = useParams();
@@ -199,6 +200,12 @@ socket.on('play', ({ currentTime, songIndex }) => {
     socket.emit('changeSong', { songIndex: idx, currentTime: 0 });
     socket.emit('activity', { icon: '🎵', text: `${user.name} changed to "${playlist[idx]?.name}"` });
   }
+  function handleSearchAddSong(song) {
+  // Same as upload — sends song to all users via socket
+  setPlaylist(prev => [...prev, song]);
+  socket.emit('uploadSong', song);
+  addActivity('🔍', `${user.name} added "${song.name}" from search`);
+}
 
   function handleSongUpload(song) {
     const updatedPlaylist = [...playlist, song];
@@ -317,6 +324,36 @@ socket.on('play', ({ currentTime, songIndex }) => {
             onUpload={handleSongUpload}
             setIsPlaying={setIsPlaying}
           />
+          {/* CENTER PANEL */}
+<div className={`room-panel room-panel-center ${mobileTab !== 'player' ? 'mobile-hidden' : ''}`}>
+  <ActivityLog activities={activities} />
+  <Visualizer audioRef={audioRef} isPlaying={isPlaying} />
+  <Player
+    audioRef={audioRef}
+    playlist={playlist}
+    currentSongIndex={currentSongIndex}
+    isPlaying={isPlaying}
+    userName={user.name}
+    onPlay={handlePlay}
+    onPause={handlePause}
+    onSeek={handleSeek}
+    onChangeSong={handleChangeSong}
+    onUpload={handleSongUpload}
+    setIsPlaying={setIsPlaying}
+  />
+  
+  {/* ✅ NEW: Song Search */}
+  <SongSearch
+    onAddSong={handleSearchAddSong}
+    userName={user.name}
+  />
+
+  <Chat
+    messages={messages}
+    currentUser={user.name}
+    onSendMessage={handleSendMessage}
+  />
+</div>
           <Chat
             messages={messages}
             currentUser={user.name}
