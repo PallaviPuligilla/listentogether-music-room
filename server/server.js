@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const crypto = require('crypto');
+const CryptoJS = require('crypto-js');
 const registerSocketHandlers = require('./socket');
 
 const app = express();
