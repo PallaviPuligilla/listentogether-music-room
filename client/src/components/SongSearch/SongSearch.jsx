@@ -1,4 +1,4 @@
-// components/SongSearch/SongSearch.jsx
+// components/SongSearch/SongSearch.jsx — Search & play full songs
 
 import React, { useState, useRef } from 'react';
 import toast from 'react-hot-toast';
@@ -19,7 +19,6 @@ export default function SongSearch({ onAddSong, userName }) {
   const [showSearch, setShowSearch] = useState(false);
   const searchTimeout = useRef(null);
 
-  // Search with debounce
   function handleSearch(value) {
     setQuery(value);
 
@@ -33,7 +32,9 @@ export default function SongSearch({ onAddSong, userName }) {
     searchTimeout.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await fetch(`${SERVER_URL}/api/search?q=${encodeURIComponent(value)}`);
+        const res = await fetch(
+          `${SERVER_URL}/api/search?q=${encodeURIComponent(value)}`
+        );
         const data = await res.json();
         setResults(data.data || []);
       } catch (err) {
@@ -42,25 +43,27 @@ export default function SongSearch({ onAddSong, userName }) {
         setResults([]);
       }
       setSearching(false);
-    }, 400); // Wait 400ms after user stops typing
+    }, 400);
   }
 
   function handleAddSong(song) {
+    if (!song.url) {
+      toast.error('This song is not available for streaming.');
+      return;
+    }
+
     onAddSong({
-      name: `${song.name} — ${song.artist}`,
-      url: song.preview,
+      name: song.name,
+      url: song.url,
       type: 'audio/mpeg',
       uploader: userName,
       duration: formatDuration(song.duration),
       cover: song.cover,
       artist: song.artist,
       album: song.album,
-      isPreview: true,
     });
 
-    toast.success(`Added "${song.name}"!`);
-
-    // Clear search
+    toast.success(`Added "${song.name}" by ${song.artist}!`);
     setQuery('');
     setResults([]);
     setShowSearch(false);
@@ -71,12 +74,12 @@ export default function SongSearch({ onAddSong, userName }) {
       <button
         onClick={() => setShowSearch(true)}
         className="w-full border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"
-        style={{ borderColor: '#c4b5fd', background: 'white' }}>
+        style={{ borderColor: '#c4b5fd', background: 'white', fontFamily: 'inherit' }}>
         <div className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>
           🔍 Search Songs
         </div>
         <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
-          Search millions of songs · Free · 30s previews
+          Search millions of songs · Full songs · Free
         </div>
       </button>
     );
@@ -88,11 +91,13 @@ export default function SongSearch({ onAddSong, userName }) {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-sm" style={{ color: '#1e1b4b' }}>🔍 Search Songs</h3>
+        <h3 className="font-bold text-sm" style={{ color: '#1e1b4b' }}>
+          🔍 Search Songs
+        </h3>
         <button
           onClick={() => { setShowSearch(false); setResults([]); setQuery(''); }}
           className="text-xs font-semibold px-3 py-1 rounded-lg"
-          style={{ background: '#f5f3ff', color: '#6c5ce7', border: 'none', cursor: 'pointer' }}>
+          style={{ background: '#f5f3ff', color: '#6c5ce7', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
           ✕ Close
         </button>
       </div>
@@ -103,7 +108,7 @@ export default function SongSearch({ onAddSong, userName }) {
           type="text"
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Search by song name, artist..."
+          placeholder="Search by song, artist, album..."
           className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none pr-10"
           style={{ borderColor: '#e0d9ff', color: '#1e1b4b', fontSize: '16px' }}
           autoFocus
@@ -115,13 +120,8 @@ export default function SongSearch({ onAddSong, userName }) {
         )}
       </div>
 
-      {/* 30s Preview Notice */}
-      <div className="text-xs mb-2 px-1" style={{ color: '#9ca3af' }}>
-        🎵 Songs play 30-second previews · Powered by Deezer
-      </div>
-
       {/* Results */}
-      <div className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+      <div className="max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
         {results.length === 0 && query && !searching && (
           <div className="text-center py-6 text-sm" style={{ color: '#9ca3af' }}>
             No songs found. Try a different search.
@@ -135,12 +135,24 @@ export default function SongSearch({ onAddSong, userName }) {
             onClick={() => handleAddSong(song)}
           >
             {/* Album Art */}
-            <img
-              src={song.cover}
-              alt={song.album}
-              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-              onError={(e) => { e.target.style.display = 'none'; }}
-            />
+            {song.cover ? (
+              <img
+                src={song.cover}
+                alt={song.album}
+                className="w-11 h-11 rounded-lg object-cover flex-shrink-0"
+                style={{ background: '#ede9fe' }}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = '';
+                  e.target.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-11 h-11 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: '#ede9fe' }}>
+                <span>🎵</span>
+              </div>
+            )}
 
             {/* Song Info */}
             <div className="flex-1 min-w-0">
@@ -150,18 +162,30 @@ export default function SongSearch({ onAddSong, userName }) {
               <div className="text-xs truncate" style={{ color: '#9ca3af' }}>
                 {song.artist} · {formatDuration(song.duration)}
               </div>
+              {song.album && (
+                <div className="text-xs truncate" style={{ color: '#c4b5fd' }}>
+                  {song.album}
+                </div>
+              )}
             </div>
 
             {/* Add Button */}
             <button
               className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
-              style={{ background: '#6c5ce7', color: 'white', border: 'none', cursor: 'pointer' }}
+              style={{ background: '#6c5ce7', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
               onClick={(e) => { e.stopPropagation(); handleAddSong(song); }}>
               + Add
             </button>
           </div>
         ))}
       </div>
+
+      {/* Footer */}
+      {results.length > 0 && (
+        <div className="text-xs text-center mt-2 pt-2 border-t" style={{ color: '#9ca3af', borderColor: '#ede9fe' }}>
+          🎵 Full songs · Click to add to room playlist
+        </div>
+      )}
     </div>
   );
 }

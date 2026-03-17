@@ -50,12 +50,91 @@ app.get('/', (req, res) => {
   res.json({ message: 'ListenTogether API running. Connect via Socket.IO.' });
 });
 
-// ─── SONG SEARCH API (Deezer — Free, no key needed) ─────────────────────────
+// ─── SONG SEARCH API (JioSaavn — Full songs, free) ──────────────────────────
 app.get('/api/search', async (req, res) => {
   const query = req.query.q;
-  if (!query) {
-    return res.json({ data: [] });
+  if (!query) return res.json({ data: [] });
+
+  try {
+    const response = await fetch(
+      `https://saavn.dev/api/search/songs?query=${encodeURIComponent(query)}&limit=15`
+    );
+    const data = await response.json();
+
+    if (!data.success) {
+      return res.json({ data: [] });
+    }
+
+    const songs = (data.data?.results || []).map((track) => ({
+      id: track.id,
+      name: track.name,
+      artist: track.artists?.primary?.map(a => a.name).join(', ') || 'Unknown',
+      album: track.album?.name || 'Unknown',
+      duration: track.duration,
+      // ✅ Get highest quality download URL
+      url: getHighestQualityUrl(track.downloadUrl),
+      cover: getHighestQualityCover(track.image),
+      year: track.year,
+      language: track.language,
+    }));
+
+    res.json({ data: songs });
+  } catch (err) {
+    console.error('Search error:', err);
+    res.json({ data: [], error: 'Search failed' });
   }
+});
+
+// Get song by ID (for direct links)
+app.get('/api/song/:id', async (req, res) => {
+  try {
+    const response = await fetch(
+      `https://saavn.dev/api/songs/${req.params.id}`
+    );
+    const data = await response.json();
+
+    if (!data.success || !data.data?.[0]) {
+      return res.json({ error: 'Song not found' });
+    }
+
+    const track = data.data[0];
+    res.json({
+      id: track.id,
+      name: track.name,
+      artist: track.artists?.primary?.map(a => a.name).join(', ') || 'Unknown',
+      album: track.album?.name || 'Unknown',
+      duration: track.duration,
+      url: getHighestQualityUrl(track.downloadUrl),
+      cover: getHighestQualityCover(track.image),
+    });
+  } catch (err) {
+    console.error('Song fetch error:', err);
+    res.json({ error: 'Failed to fetch song' });
+  }
+});
+
+// Helper: Get highest quality audio URL
+function getHighestQualityUrl(downloadUrls) {
+  if (!downloadUrls || !Array.isArray(downloadUrls)) return null;
+  // Prefer 320kbps > 160kbps > 96kbps > 48kbps > 12kbps
+  const qualities = ['320kbps', '160kbps', '96kbps', '48kbps', '12kbps'];
+  for (const q of qualities) {
+    const match = downloadUrls.find(d => d.quality === q);
+    if (match) return match.url;
+  }
+  return downloadUrls[downloadUrls.length - 1]?.url || null;
+}
+
+// Helper: Get highest quality cover image
+function getHighestQualityCover(images) {
+  if (!images || !Array.isArray(images)) return null;
+  const qualities = ['500x500', '150x150', '50x50'];
+  for (const q of qualities) {
+    const match = images.find(i => i.quality === q);
+    if (match) return match.url;
+  }
+  return images[images.length - 1]?.url || null;
+}
 
   try {
     const response = await fetch(
@@ -78,7 +157,6 @@ app.get('/api/search', async (req, res) => {
     console.error('Search error:', err);
     res.json({ data: [], error: 'Search failed' });
   }
-});
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
