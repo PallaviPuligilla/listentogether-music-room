@@ -53,14 +53,11 @@ app.get('/', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  JIOSAAVN SONG SEARCH — Built-in, no external API dependency!
-//  Directly calls JioSaavn's internal API and decrypts download URLs
+//  SONG SEARCH — Tries multiple sources
 // ══════════════════════════════════════════════════════════════════════════════
 
-const JIOSAAVN_API = 'https://www.jiosaavn.com/api.php';
-
-// ── Decrypt JioSaavn's encrypted media URL ──
-function decryptMediaUrl(encryptedUrl) {
+// JioSaavn DES decryption key
+function decryptUrl(encryptedUrl) {
   if (!encryptedUrl) return null;
   try {
     const key = '38346591';
@@ -68,18 +65,15 @@ function decryptMediaUrl(encryptedUrl) {
     decipher.setAutoPadding(true);
     let decrypted = decipher.update(encryptedUrl, 'base64', 'utf8');
     decrypted += decipher.final('utf8');
-    // Upgrade to 320kbps (highest quality)
     return decrypted
       .replace('_96.mp4', '_320.mp4')
       .replace('_96.', '_320.')
       .replace('http:', 'https:');
   } catch (err) {
-    console.error('Decryption failed:', err.message);
     return null;
   }
 }
 
-// ── Clean HTML entities from JioSaavn text ──
 function cleanText(text) {
   if (!text) return '';
   return text
@@ -88,155 +82,257 @@ function cleanText(text) {
     .replace(/&#039;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/<[^>]*>/g, '')  // Remove HTML tags
+    .replace(/<[^>]*>/g, '')
     .trim();
 }
 
-// ── Extract artist names ──
-function getArtists(track) {
-  if (track.more_info?.artistMap?.primary_artists) {
-    return track.more_info.artistMap.primary_artists
-      .map(a => cleanText(a.name))
-      .slice(0, 3)
-      .join(', ');
+// ── Try JioSaavn with multiple URL formats ──
+async function searchJioSaavn(query) {
+  const urls = [
+    // Format 1 — api_version=4 with ctx
+    `https://www.jiosaavn.com/api.php?p=1&q=${encodeURIComponent(query)}&_format=json&_marker=0&api_version=4&ctx=web6dot0&n=20&__call=search.getResults`,
+    // Format 2 — simple
+    `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}&p=1&n=20`,
+    // Format 3 — autocomplete
+    `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}`,
+  ];
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9,hi;q=0.8',
+    'Referer': 'https://www.jiosaavn.com/',
+    'Origin': 'https://www.jiosaavn.com',
+    'Cookie': 'L=english; geo=in',
+  };
+
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      console.log(`[JioSaavn] Trying format ${i + 1}...`);
+      const response = await fetch(urls[i], { headers });
+      const text = await response.text();
+      
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.log(`[JioSaavn] Format ${i + 1}: Not JSON`);
+        continue;
+      }
+
+      // Handle different response structures
+      let results = [];
+      
+      if (data.results && Array.isArray(data.results)) {
+        results = data.results;
+      } else if (data.data?.results && Array.isArray(data.data.results)) {
+        results = data.data.results;
+      } else if (data.songs?.data && Array.isArray(data.songs.data)) {
+        results = data.songs.data;
+      }
+
+      if (results.length > 0) {
+        console.log(`[JioSaavn] Format ${i + 1} worked! Found ${results.length} results`);
+        
+        const songs = results.map((track) => {
+          const encrypted = track.more_info?.encrypted_media_url || 
+                          track.encrypted_media_url;
+          const downloadUrl = decryptUrl(encrypted);
+
+          // Get artist
+          let artist = 'Unknown';
+          if (track.more_info?.artistMap?.primary_artists) {
+            artist = track.more_info.artistMap.primary_artists.map(a => cleanText(a.name)).slice(0, 3).join(', ');
+          } else if (track.primary_artists) {
+            artist = cleanText(track.primary_artists);
+          } else if (track.more_info?.singers) {
+            artist = cleanText(track.more_info.singers);
+          }
+
+          // Get cover
+          let cover = track.image || track.more_info?.image || '';
+          if (typeof cover === 'string') {
+            cover = cover.replace('50x50', '500x500').replace('150x150', '500x500').replace('http:', 'https:');
+          }
+
+          return {
+            id: track.id,
+            name: cleanText(track.title || track.song || track.name || 'Unknown'),
+            artist,
+            album: cleanText(track.more_info?.album || track.album || ''),
+            duration: parseInt(track.more_info?.duration || track.duration || 0),
+            url: downloadUrl,
+            cover,
+            year: track.year || '',
+            language: cleanText(track.language || ''),
+            hasUrl: !!downloadUrl,
+            source: 'jiosaavn',
+          };
+        });
+
+        return songs;
+      }
+
+      console.log(`[JioSaavn] Format ${i + 1}: 0 results`);
+    } catch (err) {
+      console.log(`[JioSaavn] Format ${i + 1} failed:`, err.message);
+    }
   }
-  if (track.primary_artists) return cleanText(track.primary_artists);
-  if (track.more_info?.music) return cleanText(track.more_info.music);
-  if (track.more_info?.singers) return cleanText(track.more_info.singers);
-  return 'Unknown Artist';
+
+  return []; // All formats failed
 }
 
-// ── Get highest quality cover image ──
-function getCover(imageUrl) {
-  if (!imageUrl) return null;
-  return imageUrl
-    .replace('50x50', '500x500')
-    .replace('150x150', '500x500')
-    .replace('http:', 'https:');
+// ── Deezer search (30s previews — always works as backup) ──
+async function searchDeezer(query) {
+  try {
+    console.log('[Deezer] Searching as backup...');
+    const response = await fetch(
+      `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=15`
+    );
+    const data = await response.json();
+
+    if (!data.data || data.data.length === 0) return [];
+
+    return data.data.map((track) => ({
+      id: 'dz-' + track.id,
+      name: track.title || 'Unknown',
+      artist: track.artist?.name || 'Unknown',
+      album: track.album?.title || '',
+      duration: track.duration || 0,
+      url: track.preview || null,
+      cover: track.album?.cover_medium || track.album?.cover || null,
+      year: '',
+      language: '',
+      hasUrl: !!track.preview,
+      source: 'deezer',
+      isPreview: true,
+    }));
+  } catch (err) {
+    console.log('[Deezer] Failed:', err.message);
+    return [];
+  }
 }
 
-// ─── SEARCH ENDPOINT ────────────────────────────────────────────────────────
+// ─── MAIN SEARCH ENDPOINT ─────────────────────────────────────────────────
 app.get('/api/search', async (req, res) => {
   const query = req.query.q;
   if (!query) return res.json({ data: [] });
 
-  try {
-    const url = `${JIOSAAVN_API}?__call=search.getResults&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}&p=1&n=20`;
+  console.log(`\n[Search] ========== Searching: "${query}" ==========`);
 
-    console.log(`[Search] Searching for: "${query}"`);
+  // Try JioSaavn first (full songs)
+  let songs = await searchJioSaavn(query);
 
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-        'Accept-Language': 'en-US,en;q=0.9,hi;q=0.8',
-      },
-    });
+  let source = 'jiosaavn';
 
-    const text = await response.text();
-
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error('[Search] Invalid JSON response');
-      return res.json({ data: [], error: 'Invalid response from music service' });
-    }
-
-    const results = data.results || data.data?.results || [];
-
-    const songs = results.map((track) => {
-      const encryptedUrl = track.more_info?.encrypted_media_url;
-      const downloadUrl = decryptMediaUrl(encryptedUrl);
-
-      return {
-        id: track.id,
-        name: cleanText(track.title || track.song || track.name || 'Unknown'),
-        artist: getArtists(track),
-        album: cleanText(track.more_info?.album || track.album || ''),
-        duration: parseInt(track.more_info?.duration || track.duration || 0),
-        url: downloadUrl,
-        cover: getCover(track.image),
-        year: track.year || track.more_info?.year || '',
-        language: cleanText(track.language || track.more_info?.language || ''),
-        hasUrl: !!downloadUrl,
-      };
-    });
-
-    const available = songs.filter(s => s.hasUrl).length;
-    console.log(`[Search] Found ${songs.length} songs, ${available} available for streaming`);
-
-    res.json({ data: songs });
-  } catch (err) {
-    console.error('[Search] Error:', err.message);
-    res.json({ data: [], error: 'Search failed' });
+  // If JioSaavn failed, try Deezer (30s previews)
+  if (songs.length === 0) {
+    console.log('[Search] JioSaavn returned 0 results, trying Deezer...');
+    songs = await searchDeezer(query);
+    source = 'deezer';
   }
+
+  const available = songs.filter(s => s.hasUrl).length;
+  console.log(`[Search] Final: ${songs.length} songs found (${available} streamable) from ${source}`);
+
+  res.json({ data: songs, source });
 });
 
-// ─── GET SONG BY ID ─────────────────────────────────────────────────────────
-app.get('/api/song/:id', async (req, res) => {
-  try {
-    const url = `${JIOSAAVN_API}?__call=song.getDetails&cc=in&_marker=0%3F_marker%3D0&_format=json&pids=${req.params.id}`;
-
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
-
-    const data = await response.json();
-    const track = Object.values(data)[0];
-
-    if (!track) {
-      return res.json({ error: 'Song not found' });
-    }
-
-    const downloadUrl = decryptMediaUrl(track.more_info?.encrypted_media_url);
-
-    res.json({
-      id: track.id,
-      name: cleanText(track.title || track.song),
-      artist: getArtists(track),
-      album: cleanText(track.more_info?.album || ''),
-      duration: parseInt(track.more_info?.duration || 0),
-      url: downloadUrl,
-      cover: getCover(track.image),
-    });
-  } catch (err) {
-    console.error('[Song] Error:', err.message);
-    res.json({ error: 'Failed to fetch song' });
-  }
-});
-
-// ─── DEBUG ENDPOINT ─────────────────────────────────────────────────────────
+// ─── DEBUG ENDPOINT — Shows raw API responses ──────────────────────────────
 app.get('/api/debug-search', async (req, res) => {
-  const query = req.query.q || 'Taylor Swift';
-  try {
-    const url = `${JIOSAAVN_API}?__call=search.getResults&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}&p=1&n=2`;
+  const query = req.query.q || 'Arijit Singh';
 
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    });
+  const debug = {
+    query,
+    timestamp: new Date().toISOString(),
+    jiosaavn: {},
+    deezer: {},
+  };
 
-    const data = await response.json();
-    const firstResult = data.results?.[0];
+  // Test JioSaavn formats
+  const jiosaavnUrls = [
+    {
+      name: 'format1_api_v4',
+      url: `https://www.jiosaavn.com/api.php?p=1&q=${encodeURIComponent(query)}&_format=json&_marker=0&api_version=4&ctx=web6dot0&n=2&__call=search.getResults`,
+    },
+    {
+      name: 'format2_simple',
+      url: `https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}&p=1&n=2`,
+    },
+    {
+      name: 'format3_autocomplete',
+      url: `https://www.jiosaavn.com/api.php?__call=autocomplete.get&_format=json&_marker=0&cc=in&includeMetaTags=1&query=${encodeURIComponent(query)}`,
+    },
+  ];
 
-    // Show what we get and what we decrypt
-    const debugInfo = {
-      raw_first_result: firstResult,
-      encrypted_url: firstResult?.more_info?.encrypted_media_url || 'NOT FOUND',
-      decrypted_url: firstResult?.more_info?.encrypted_media_url
-        ? decryptMediaUrl(firstResult.more_info.encrypted_media_url)
-        : 'NOTHING TO DECRYPT',
-      total_results: data.results?.length || 0,
-    };
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Referer': 'https://www.jiosaavn.com/',
+    'Origin': 'https://www.jiosaavn.com',
+    'Cookie': 'L=english; geo=in',
+  };
 
-    res.json(debugInfo);
-  } catch (err) {
-    res.json({ error: err.message });
+  for (const item of jiosaavnUrls) {
+    try {
+      const response = await fetch(item.url, { headers });
+      const text = await response.text();
+      const status = response.status;
+
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) {
+        parsed = { raw_text_first_500: text.substring(0, 500), parse_error: true };
+      }
+
+      // Count results
+      let resultCount = 0;
+      if (parsed.results) resultCount = Array.isArray(parsed.results) ? parsed.results.length : Object.keys(parsed.results).length;
+      if (parsed.data?.results) resultCount = parsed.data.results.length;
+      if (parsed.songs?.data) resultCount = parsed.songs.data.length;
+
+      // Check for encrypted URL in first result
+      let firstResult = null;
+      if (Array.isArray(parsed.results) && parsed.results[0]) {
+        firstResult = {
+          title: parsed.results[0].title || parsed.results[0].song,
+          has_encrypted_url: !!parsed.results[0].more_info?.encrypted_media_url,
+          encrypted_url_preview: parsed.results[0].more_info?.encrypted_media_url?.substring(0, 50),
+          decrypted_url: decryptUrl(parsed.results[0].more_info?.encrypted_media_url),
+        };
+      }
+
+      debug.jiosaavn[item.name] = {
+        status,
+        result_count: resultCount,
+        response_keys: Object.keys(parsed),
+        first_result: firstResult,
+      };
+    } catch (err) {
+      debug.jiosaavn[item.name] = { error: err.message };
+    }
   }
+
+  // Test Deezer
+  try {
+    const response = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=2`);
+    const data = await response.json();
+    debug.deezer = {
+      status: response.status,
+      result_count: data.data?.length || 0,
+      first_result: data.data?.[0] ? {
+        title: data.data[0].title,
+        artist: data.data[0].artist?.name,
+        preview_url: data.data[0].preview,
+        has_preview: !!data.data[0].preview,
+      } : null,
+    };
+  } catch (err) {
+    debug.deezer = { error: err.message };
+  }
+
+  res.json(debug);
 });
 
 // ─── START SERVER ───────────────────────────────────────────────────────────
@@ -244,5 +340,5 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`✅ Allowed origins: ${allowedOrigins.join(', ')}`);
-  console.log(`✅ Song search: Built-in JioSaavn API`);
+  console.log(`✅ Song search: JioSaavn + Deezer fallback`);
 });

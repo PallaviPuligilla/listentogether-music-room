@@ -15,6 +15,7 @@ export default function SongSearch({ onAddSong, userName }) {
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [source, setSource] = useState('');
   const searchTimeout = useRef(null);
 
   function handleSearch(value) {
@@ -33,15 +34,16 @@ export default function SongSearch({ onAddSong, userName }) {
           `${SERVER_URL}/api/search?q=${encodeURIComponent(value)}`
         );
         const data = await res.json();
-        console.log('🔍 Search results:', data.data);
+        console.log('🔍 Search results:', data);
         setResults(data.data || []);
+        setSource(data.source || '');
       } catch (err) {
         console.error('Search error:', err);
         toast.error('Search failed. Try again.');
         setResults([]);
       }
       setSearching(false);
-    }, 400);
+    }, 500);
   }
 
   function handleAddSong(song) {
@@ -53,7 +55,7 @@ export default function SongSearch({ onAddSong, userName }) {
     console.log('✅ Adding song:', song.name, song.url);
 
     onAddSong({
-      name: song.name,
+      name: song.artist ? `${song.name} — ${song.artist}` : song.name,
       url: song.url,
       type: 'audio/mpeg',
       uploader: userName,
@@ -73,13 +75,13 @@ export default function SongSearch({ onAddSong, userName }) {
     return (
       <button
         onClick={() => setShowSearch(true)}
-        className="w-full border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"
-        style={{ borderColor: '#c4b5fd', background: 'white', fontFamily: 'inherit', border: '2px dashed #c4b5fd' }}>
+        className="w-full rounded-xl p-3 text-center cursor-pointer transition-colors hover:bg-purple-50"
+        style={{ background: 'white', fontFamily: 'inherit', border: '2px dashed #c4b5fd' }}>
         <div className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>
           🔍 Search Songs
         </div>
         <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
-          Search millions of songs · Full songs · Free
+          Search millions of songs · Free
         </div>
       </button>
     );
@@ -108,7 +110,7 @@ export default function SongSearch({ onAddSong, userName }) {
           type="text"
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Search by song, artist, album..."
+          placeholder="Search by song, artist..."
           className="w-full border rounded-xl px-4 py-2.5 text-sm outline-none pr-10"
           style={{ borderColor: '#e0d9ff', color: '#1e1b4b', fontSize: '16px' }}
           autoFocus
@@ -119,6 +121,15 @@ export default function SongSearch({ onAddSong, userName }) {
           </div>
         )}
       </div>
+
+      {/* Source indicator */}
+      {source && results.length > 0 && (
+        <div className="text-xs mb-2 px-1" style={{ color: '#9ca3af' }}>
+          {source === 'deezer'
+            ? '🎵 30-second previews · Powered by Deezer'
+            : '🎵 Full songs available'}
+        </div>
+      )}
 
       {/* Results */}
       <div className="max-h-72 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
@@ -132,14 +143,14 @@ export default function SongSearch({ onAddSong, userName }) {
           <div
             key={song.id}
             className="flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors hover:bg-purple-50"
-            style={{ opacity: song.url ? 1 : 0.5 }}
+            style={{ opacity: song.hasUrl ? 1 : 0.4 }}
             onClick={() => handleAddSong(song)}
           >
             {/* Album Art */}
             {song.cover ? (
               <img
                 src={song.cover}
-                alt={song.album}
+                alt=""
                 className="w-11 h-11 rounded-lg object-cover flex-shrink-0"
                 style={{ background: '#ede9fe' }}
                 onError={(e) => {
@@ -161,11 +172,12 @@ export default function SongSearch({ onAddSong, userName }) {
               </div>
               <div className="text-xs truncate" style={{ color: '#9ca3af' }}>
                 {song.artist} · {formatDuration(song.duration)}
+                {song.isPreview && ' · 30s'}
               </div>
             </div>
 
             {/* Add Button */}
-            {song.url ? (
+            {song.hasUrl ? (
               <button
                 className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
                 style={{ background: '#6c5ce7', color: 'white', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
@@ -173,7 +185,8 @@ export default function SongSearch({ onAddSong, userName }) {
                 + Add
               </button>
             ) : (
-              <span className="text-xs flex-shrink-0" style={{ color: '#d1d5db' }}>
+              <span className="text-xs flex-shrink-0 px-2 py-1 rounded"
+                style={{ color: '#9ca3af', background: '#f3f4f6' }}>
                 N/A
               </span>
             )}
