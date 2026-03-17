@@ -1,5 +1,3 @@
-// components/Player/Player.jsx — Music player with Cloudinary upload
-
 import React, { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { uploadAudio, formatDuration } from '../../utils/cloudinaryUpload';
@@ -39,22 +37,53 @@ export default function Player({
 
   const song = playlist[currentSongIndex] || null;
 
+  // ── Load song when index changes ──
   useEffect(() => {
     if (!audioRef.current || !song) return;
-    audioRef.current.src = song.url;
-    audioRef.current.load();
-    audioRef.current.volume = volume / 100;
-    audioRef.current.play()
-      .then(() => setIsPlaying(true))
-      .catch(() => {});
+
+    const audio = audioRef.current;
+
+    // ✅ FIX: Stop previous audio first
+    audio.pause();
+    audio.currentTime = 0;
+
+    console.log('🎵 Loading song:', song.name, song.url);
+
+    audio.src = song.url;
+    audio.load();
+    audio.volume = volume / 100;
+
+    // ✅ FIX: Wait for audio to be ready, then play
+    const playWhenReady = () => {
+      audio.play()
+        .then(() => {
+          setIsPlaying(true);
+          console.log('✅ Audio playing! Volume:', audio.volume);
+        })
+        .catch((err) => {
+          console.error('❌ Audio play failed:', err.message);
+          // ✅ On mobile, autoplay might be blocked — user needs to tap play
+          toast('Tap the play button to start! 🎵', { icon: '👆' });
+        });
+    };
+
+    audio.addEventListener('canplay', playWhenReady, { once: true });
+
+    return () => {
+      audio.removeEventListener('canplay', playWhenReady);
+    };
   }, [currentSongIndex, song?.url]);
 
+  // ── Audio event listeners ──
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onLoaded = () => setDuration(audio.duration);
+    const onLoaded = () => {
+      setDuration(audio.duration);
+      console.log('✅ Audio loaded, duration:', audio.duration);
+    };
     const onEnded = () => {
       setIsPlaying(false);
       if (playlist.length > 1) {
@@ -62,15 +91,22 @@ export default function Player({
         onChangeSong(next);
       }
     };
+    // ✅ FIX: Log any audio errors
+    const onError = (e) => {
+      console.error('❌ Audio error:', audio.error);
+      toast.error('Failed to play this song. Try another format.');
+    };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoaded);
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoaded);
       audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
     };
   }, [audioRef, currentSongIndex, playlist.length, onChangeSong]);
 
@@ -82,9 +118,18 @@ export default function Player({
       setIsPlaying(false);
       onPause(audio.currentTime);
     } else {
-      audio.play().catch(() => {});
-      setIsPlaying(true);
-      onPlay(audio.currentTime, currentSongIndex);
+      // ✅ FIX: Make sure volume is set before playing
+      audio.volume = volume / 100;
+      audio.muted = false;
+      audio.play()
+        .then(() => {
+          setIsPlaying(true);
+          onPlay(audio.currentTime, currentSongIndex);
+        })
+        .catch((err) => {
+          console.error('Play failed:', err);
+          toast.error('Tap again to play');
+        });
     }
   }
 
@@ -110,10 +155,13 @@ export default function Player({
   function handleVolumeChange(e) {
     const v = Number(e.target.value);
     setVolume(v);
-    if (audioRef.current) audioRef.current.volume = v / 100;
+    if (audioRef.current) {
+      audioRef.current.volume = v / 100;
+      audioRef.current.muted = false;
+    }
   }
 
-  // ✅ NEW: Upload to Cloudinary — creates public URL for ALL users
+  // ✅ FIX: Upload to Cloudinary — accept ALL audio formats
   async function handleFileUpload(e) {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -121,13 +169,22 @@ export default function Player({
     setUploading(true);
 
     for (const file of files) {
+      // ✅ FIX: Max 25MB check
       if (file.size > 25 * 1024 * 1024) {
         toast.error(`"${file.name}" is too large. Max 25MB.`);
         continue;
       }
 
-      if (!file.type.startsWith('audio/')) {
-        toast.error(`"${file.name}" is not an audio file.`);
+      // ✅ FIX: Accept ANY audio file — don't reject WhatsApp/unusual formats
+      // Cloudinary will handle the conversion
+      const isAudio = file.type.startsWith('audio/') || 
+                      file.type.startsWith('video/') ||
+                      file.name.match(/\.(mp3|wav|ogg|opus|m4a|aac|flac|wma|amr|webm)$/i) ||
+                      file.type === '' ||
+                      file.type === 'application/octet-stream';
+
+      if (!isAudio) {
+        toast.error(`"${file.name}" doesn't look like an audio file. Try MP3 or WAV.`);
         continue;
       }
 
@@ -137,7 +194,6 @@ export default function Player({
         toast.loading(`Uploading "${name}" to cloud...`, { id: 'upload-' + name });
         setUploadProgress(0);
 
-        // ✅ Upload to Cloudinary — returns public URL!
         const result = await uploadAudio(file, (progress) => {
           setUploadProgress(progress);
         });
@@ -145,11 +201,10 @@ export default function Player({
         toast.success(`"${name}" uploaded!`, { id: 'upload-' + name });
         console.log('✅ Cloudinary URL:', result.url);
 
-        // ✅ Send Cloudinary URL — works for ALL users!
         onUpload({
           name,
           url: result.url,
-          type: file.type,
+          type: file.type || 'audio/mpeg',
           uploader: userName,
           duration: formatDuration(result.duration),
         });
@@ -254,7 +309,7 @@ export default function Player({
         <span className="text-base">🔊</span>
       </div>
 
-      {/* ✅ Upload with progress bar */}
+      {/* Upload with progress */}
       {uploading ? (
         <div className="border-2 rounded-xl p-4 text-center"
           style={{ borderColor: '#6c5ce7', background: '#f5f3ff' }}>
@@ -281,17 +336,26 @@ export default function Player({
           style={{ borderColor: '#c4b5fd' }}>
           <div className="text-sm font-semibold" style={{ color: '#6c5ce7' }}>⬆ Upload MP3</div>
           <div className="text-xs mt-0.5" style={{ color: '#9ca3af' }}>
-            Click to add songs · MP3, WAV, OGG · Max 25MB
+            MP3, WAV, OGG, M4A, OPUS · Max 25MB
           </div>
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" accept="audio/*" multiple
+      {/* ✅ FIX: Accept more audio formats on mobile */}
+      <input ref={fileInputRef} type="file"
+        accept="audio/*,.mp3,.wav,.ogg,.m4a,.opus,.aac,.flac,.amr,.webm"
+        multiple
         onChange={handleFileUpload} style={{ display: 'none' }}
         disabled={uploading}
       />
 
-      <audio ref={audioRef} style={{ display: 'none' }} />
+      {/* ✅ FIX: crossOrigin for Cloudinary URLs + preload */}
+      <audio
+        ref={audioRef}
+        crossOrigin="anonymous"
+        preload="auto"
+        style={{ display: 'none' }}
+      />
     </div>
   );
 }
