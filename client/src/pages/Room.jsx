@@ -101,14 +101,22 @@ export default function Room() {
       }
     });
 
-    socket.on('play', ({ currentTime, songIndex }) => {
-      if (songIndex !== undefined) setCurrentSongIndex(songIndex);
-      setIsPlaying(true);
-      if (audioRef.current) {
-        if (currentTime !== undefined) audioRef.current.currentTime = currentTime;
-        audioRef.current.play().catch(() => {});
-      }
-    });
+    
+socket.on('play', ({ currentTime, songIndex }) => {
+  if (songIndex !== undefined) setCurrentSongIndex(songIndex);
+  setIsPlaying(true);
+  if (audioRef.current) {
+    audioRef.current.volume = 0.8;
+    audioRef.current.muted = false;
+    if (currentTime !== undefined) audioRef.current.currentTime = currentTime;
+    audioRef.current.play()
+      .then(() => console.log('✅ Playing from sync'))
+      .catch((err) => {
+        console.log('⚠️ Autoplay blocked on this device, user needs to tap play');
+        toast('👆 Tap play to listen!', { duration: 3000 });
+      });
+  }
+});
 
     socket.on('pause', ({ currentTime }) => {
       setIsPlaying(false);
